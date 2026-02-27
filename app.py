@@ -71,7 +71,7 @@ if st.button("文字起こしを開始", type="primary"):
             sample_file = genai.upload_file(path=tmp_pdf_path, display_name="uploaded_document")
             
             # モデルの初期化とテキスト抽出
-            model = genai.GenerativeModel(model_name="gemini-1.5-pro")
+            model = genai.GenerativeModel(model_name="gemini-3-flash")
             prompt = """
             このPDF文書の文字起こしを行ってください。
             以下のルールを厳守すること：
@@ -123,4 +123,5 @@ if st.button("文字起こしを開始", type="primary"):
             )
 
         except Exception as e:
+
             st.error(f"エラーが発生しました: {e}")
