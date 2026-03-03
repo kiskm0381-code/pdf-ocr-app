@@ -9,11 +9,17 @@ import os
 # --- ページ設定（美しいUIのベース：wideレイアウトに変更） ---
 st.set_page_config(page_title="PDF文字起こし＆Word統合アプリ", layout="wide", initial_sidebar_state="expanded")
 
-# --- カスタムCSS（視認性の向上） ---
+# --- カスタムCSS（視認性の向上と不要なUIの完全排除） ---
 st.markdown("""
     <style>
+    /* 既存の美しいUI設定 */
     .main-header {font-size: 2.2rem; font-weight: bold; color: #1E3A8A; margin-bottom: 0.5rem;}
     .sub-header {font-size: 1.1rem; color: #4B5563; margin-bottom: 2rem;}
+    
+    /* 開発者用UIの非表示（リスクと無駄の排除） */
+    #MainMenu {visibility: hidden;} /* 右上の「…」メニューと英語表記を消す */
+    header {visibility: hidden;} /* GitHubアイコンを含む上部ヘッダーを丸ごと消す */
+    footer {visibility: hidden;} /* 下部の「Made with Streamlit」を消す */
     </style>
 """, unsafe_allow_html=True)
 
