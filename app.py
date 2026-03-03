@@ -6,8 +6,8 @@ from datetime import datetime
 import tempfile
 import os
 
-# --- ページ設定（美しいUIのベース：wideレイアウトに変更） ---
-st.set_page_config(page_title="PDF文字起こし＆Word統合アプリ", layout="wide", initial_sidebar_state="expanded")
+# --- ページ設定（美しいUIのベース：wideレイアウトに変更、サイドバー設定削除） ---
+st.set_page_config(page_title="PDF文字起こし＆Word統合アプリ", layout="wide")
 
 # --- カスタムCSS（視認性の向上と不要なUIの完全排除） ---
 st.markdown("""
@@ -58,16 +58,6 @@ if not st.session_state["authenticated"]:
 # ==========================================
 # これ以降は認証成功時のみ表示・実行される処理
 # ==========================================
-
-# --- サイドバー：検索エリア（構造的アップデート） ---
-with st.sidebar:
-    st.header("🔍 過去データ検索")
-    search_query = st.text_input("過去の抽出データを検索（キーワード）")
-    if search_query:
-        st.info(f"「{search_query}」の検索結果（※今後のアップデートで実装予定です）")
-    
-    st.divider()
-    st.caption("💡 使い方ガイドは画面右側にも記載しています。")
 
 # SecretsからAPIキーを取得
 api_key = st.secrets.get("GEMINI_API_KEY")
