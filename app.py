@@ -7,24 +7,26 @@ import tempfile
 import os
 from pypdf import PdfReader # ページ数カウントのために追加
 
-# --- ページ設定（サイドバー設定を削除、wideレイアウト） ---
+# --- アプリの制限設定（3つの防波堤） ---
+MAX_FILE_SIZE_MB = 10  # 1ファイルあたりの最大サイズ(MB)
+MAX_FILES = 5          # 1回に処理できる最大ファイル数
+MAX_TOTAL_PAGES = 30   # 1回に処理できる合計最大ページ数
+
+# --- ページ設定（wideレイアウト） ---
 st.set_page_config(page_title="PDF文字起こし＆Word統合アプリ", layout="wide")
 
-# --- カスタムCSS（視認性の向上と不要なUIの完全排除） ---
+# --- カスタムCSS（不要なUIの完全排除とデザイン調整） ---
 st.markdown("""
     <style>
     .main-header {font-size: 2.2rem; font-weight: bold; color: #1E3A8A; margin-bottom: 0.5rem;}
     .sub-header {font-size: 1.1rem; color: #4B5563; margin-bottom: 1rem;}
-    #MainMenu {visibility: hidden;} /* 右上メニュー非表示 */
-    header {visibility: hidden;} /* ヘッダー非表示 */
-    footer {visibility: hidden;} /* フッター非表示 */
+    #MainMenu {visibility: hidden;}
+    header {visibility: hidden;}
+    footer {visibility: hidden;}
     .guide-box {background-color: #F3F4F6; padding: 1.5rem; border-radius: 10px; border: 1px solid #E5E7EB;}
+    .alert-box {background-color: #FEF2F2; color: #991B1B; padding: 1rem; border-radius: 5px; border: 1px solid #F87171; margin-top: 1rem;}
     </style>
 """, unsafe_allow_html=True)
-
-# --- 定数設定（コスト防波堤） ---
-MAX_TOTAL_PAGES = 30  # 1回の処理で許容する合計ページ数
-MAX_FILES = 5         # 1回にアップロードできる最大ファイル数
 
 # --- セッション状態の初期化 ---
 if "authenticated" not in st.session_state:
@@ -55,32 +57,36 @@ if not api_key:
 
 genai.configure(api_key=api_key)
 
-# --- 100%幅エリア（タイトルとサブタイトル） ---
+# --- ヘッダー領域 ---
 st.markdown('<div class="main-header">📄 PDF文字起こし＆Word統合ツール</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-header">スキャンした複数のPDFを一度に高精度でテキスト化し、美しいWordファイルに統合します。</div>', unsafe_allow_html=True)
-st.divider() 
+st.divider()
 
 # --- 画面の分割（左側: 75% 作業エリア, 右側: 25% ガイドエリア） ---
 main_col, guide_col = st.columns([3, 1])
 
-# ===== 右側：ご利用ガイド =====
+# ===== 右側：ご利用ガイドと制限事項 =====
 with guide_col:
     st.markdown("""
     <div class="guide-box">
         <h4 style="margin-top: 0;">💡 ご利用ガイド</h4>
-        <p><b>STEP 1: PDFのアップロード</b><br>
-        左側の枠に文字起こししたいPDFをドラッグ＆ドロップします。（複数ファイルの一括選択も可能です）</p>
-        <p><b>STEP 2: 統合先Wordの指定（任意）</b><br>
-        既存のWordファイルの末尾にテキストを追記したい場合は、右側の枠にアップロードしてください。</p>
-        <p><b>STEP 3: 文字起こしの実行</b><br>
-        「✨ 文字起こしを開始」ボタンを押すと、AIが全自動でテキストの抽出と、読みやすい形への再構築を行います。</p>
-        <p><b>STEP 4: 確認とダウンロード</b><br>
-        処理完了後、プレビュー画面が表示されます。内容を確認し、ページ下部のボタンからWordファイルをダウンロードして完了です。</p>
-        <hr>
-        <p style="font-size: 0.9em; color: #EF4444;"><b>【システム制限について】</b><br>
-        安定稼働のため、1回の処理につき<b>最大{}ファイル、合計{}ページまで</b>の制限を設けています。</p>
+        <p><b>STEP 1: PDFのアップロード</b><br>左側の枠に文字起こししたいPDFをドラッグ＆ドロップします。</p>
+        <p><b>STEP 2: 統合先Wordの指定（任意）</b><br>既存のファイルの末尾に追記したい場合は右側の枠にアップロードします。</p>
+        <p><b>STEP 3: 文字起こしの実行</b><br>「✨ 文字起こしを開始」ボタンを押すと、AIが全自動でテキストを抽出・再構築します。</p>
+        <p><b>STEP 4: 確認とダウンロード</b><br>プレビューを確認後、Wordファイルをダウンロードしてください。</p>
     </div>
-    """.format(MAX_FILES, MAX_TOTAL_PAGES), unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
+    
+    # サイト内に制限事項を明記
+    st.markdown(f"""
+    <div class="alert-box">
+        <b>⚠️ システム利用上の制限</b><br>
+        安定稼働のため、1回の処理につき以下の制限を設けています。<br>
+        ・最大ファイル数: <b>{MAX_FILES} ファイル</b>まで<br>
+        ・ファイルサイズ: 1つあたり <b>{MAX_FILE_SIZE_MB}MB</b> まで<br>
+        ・合計ページ数: 最大 <b>{MAX_TOTAL_PAGES} ページ</b>まで
+    </div>
+    """, unsafe_allow_html=True)
 
 # ===== 左側：メイン作業エリア =====
 with main_col:
@@ -88,8 +94,7 @@ with main_col:
         st.write("### 1. ファイルのアップロード")
         upload_col1, upload_col2 = st.columns(2)
         with upload_col1:
-            # 防波堤1: UI側での注意喚起（Streamlitのデフォルトは200MBまで）
-            uploaded_pdfs = st.file_uploader(f"📂 PDFファイルをドラッグ＆ドロップ（最大{MAX_FILES}ファイルまで）", type=["pdf"], accept_multiple_files=True)
+            uploaded_pdfs = st.file_uploader(f"📂 PDFファイル（最大{MAX_FILES}個）", type=["pdf"], accept_multiple_files=True)
         with upload_col2:
             uploaded_word = st.file_uploader("📝 統合したい既存のWordファイル（任意）", type=["docx"])
             if uploaded_word:
@@ -101,31 +106,33 @@ with main_col:
             st.error("PDFファイルをアップロードしてください。")
             st.stop()
 
-        # 防波堤2: ファイル数の制限
+        # 【防波堤1】ファイル数の制限チェック
         if len(uploaded_pdfs) > MAX_FILES:
-            st.error(f"⚠️ アップロードできるファイルは最大{MAX_FILES}個までです。ファイルを減らして再実行してください。")
+            st.error(f"⚠️ エラー: アップロードできるファイルは最大 {MAX_FILES} 個までです。（現在: {len(uploaded_pdfs)}個）")
             st.stop()
 
-        # 防波堤3: 合計ページ数のカウントと制限
         total_pages = 0
-        with st.spinner("ファイルのページ数をチェックしています..."):
+        with st.spinner("ファイルの要件をチェックしています..."):
             for pdf_file in uploaded_pdfs:
+                # 【防波堤2】ファイルサイズの制限チェック
+                if pdf_file.size > (MAX_FILE_SIZE_MB * 1024 * 1024):
+                    st.error(f"⚠️ エラー: 『{pdf_file.name}』のサイズが {MAX_FILE_SIZE_MB}MB を超えています。")
+                    st.stop()
+                
+                # 【防波堤3】合計ページ数の制限チェック
                 try:
                     pdf_reader = PdfReader(pdf_file)
                     total_pages += len(pdf_reader.pages)
-                    # ファイルポインタをリセット（重要：AIに送る前に最初に戻す）
-                    pdf_file.seek(0) 
+                    pdf_file.seek(0) # AIに渡すためにファイルポインタを先頭に戻す
                 except Exception as e:
-                    st.error(f"PDFファイルの読み取りに失敗しました ({pdf_file.name}): {e}")
+                    st.error(f"⚠️ エラー: 『{pdf_file.name}』の読み取りに失敗しました。破損している可能性があります。")
                     st.stop()
 
         if total_pages > MAX_TOTAL_PAGES:
-            st.error(f"⚠️ ページ数オーバー: 今回アップロードされた合計ページ数は {total_pages} ページです。システムの安定稼働のため、1回の処理は合計 {MAX_TOTAL_PAGES} ページ以下にしてください。")
+            st.error(f"⚠️ エラー: 合計ページ数が上限の {MAX_TOTAL_PAGES} ページを超えています。（現在: 合計 {total_pages} ページ）ファイルを減らして再実行してください。")
             st.stop()
 
-        # --- 以下、文字起こし本処理 ---
-        st.info(f"合計 {total_pages} ページの処理を開始します...")
-        
+        # --- 以下、文字起こしの本処理 ---
         if uploaded_word:
             doc = Document(uploaded_word)
             doc.add_page_break() 
