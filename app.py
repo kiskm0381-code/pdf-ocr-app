@@ -5,33 +5,28 @@ import io
 from datetime import datetime
 import tempfile
 import os
+from pypdf import PdfReader # ページ数カウントのために追加
 
-# --- ページ設定（美しいUIのベース：wideレイアウトに変更、サイドバー設定削除） ---
+# --- ページ設定（サイドバー設定を削除、wideレイアウト） ---
 st.set_page_config(page_title="PDF文字起こし＆Word統合アプリ", layout="wide")
 
 # --- カスタムCSS（視認性の向上と不要なUIの完全排除） ---
 st.markdown("""
     <style>
-    /* 既存の美しいUI設定 */
     .main-header {font-size: 2.2rem; font-weight: bold; color: #1E3A8A; margin-bottom: 0.5rem;}
     .sub-header {font-size: 1.1rem; color: #4B5563; margin-bottom: 1rem;}
-    
-    /* 開発者用UIの非表示（リスクと無駄の排除） */
-    #MainMenu {visibility: hidden;} /* 右上の「…」メニューと英語表記を消す */
-    header {visibility: hidden;} /* GitHubアイコンを含む上部ヘッダーを丸ごと消す */
-    footer {visibility: hidden;} /* 下部の「Made with Streamlit」を消す */
-    
-    /* ガイド部分のデザイン微調整 */
-    .guide-box {
-        background-color: #F3F4F6; 
-        padding: 1.5rem; 
-        border-radius: 10px; 
-        border: 1px solid #E5E7EB;
-    }
+    #MainMenu {visibility: hidden;} /* 右上メニュー非表示 */
+    header {visibility: hidden;} /* ヘッダー非表示 */
+    footer {visibility: hidden;} /* フッター非表示 */
+    .guide-box {background-color: #F3F4F6; padding: 1.5rem; border-radius: 10px; border: 1px solid #E5E7EB;}
     </style>
 """, unsafe_allow_html=True)
 
-# --- セッション状態の初期化（ログイン状態の保持） ---
+# --- 定数設定（コスト防波堤） ---
+MAX_TOTAL_PAGES = 30  # 1回の処理で許容する合計ページ数
+MAX_FILES = 5         # 1回にアップロードできる最大ファイル数
+
+# --- セッション状態の初期化 ---
 if "authenticated" not in st.session_state:
     st.session_state["authenticated"] = False
 
@@ -39,27 +34,20 @@ if "authenticated" not in st.session_state:
 if not st.session_state["authenticated"]:
     st.title("🔒 アクセス制限")
     st.write("このアプリを利用するには合言葉を入力してください。")
-    
-    # Streamlit Secretsから合言葉を取得（クラウド上で後から設定）
     correct_password = st.secrets.get("APP_PASSWORD", "default_password")
-    
     password_input = st.text_input("合言葉", type="password")
-    
     if st.button("ログイン", type="primary"):
         if password_input == correct_password:
             st.session_state["authenticated"] = True
-            st.rerun() # 画面をリロードしてメイン処理へ進む
+            st.rerun()
         else:
             st.error("合言葉が間違っています。")
-    
-    # 認証されるまではこれ以降のコードを実行しない
     st.stop()
 
 # ==========================================
 # これ以降は認証成功時のみ表示・実行される処理
 # ==========================================
 
-# SecretsからAPIキーを取得
 api_key = st.secrets.get("GEMINI_API_KEY")
 if not api_key:
     st.error("システムエラー: APIキーが設定されていません。管理者に連絡してください。")
@@ -67,16 +55,12 @@ if not api_key:
 
 genai.configure(api_key=api_key)
 
-# ---------------------------------------------------------
-# ▼ 100%幅エリア（タイトルとサブタイトル）
-# ---------------------------------------------------------
+# --- 100%幅エリア（タイトルとサブタイトル） ---
 st.markdown('<div class="main-header">📄 PDF文字起こし＆Word統合ツール</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-header">スキャンした複数のPDFを一度に高精度でテキスト化し、美しいWordファイルに統合します。</div>', unsafe_allow_html=True)
-st.divider() # タイトルエリアと作業エリアを美しく区切る
+st.divider() 
 
-# ---------------------------------------------------------
-# ▼ 画面の分割（左側: 75% 作業エリア, 右側: 25% ガイドエリア）
-# ---------------------------------------------------------
+# --- 画面の分割（左側: 75% 作業エリア, 右側: 25% ガイドエリア） ---
 main_col, guide_col = st.columns([3, 1])
 
 # ===== 右側：ご利用ガイド =====
@@ -92,9 +76,11 @@ with guide_col:
         「✨ 文字起こしを開始」ボタンを押すと、AIが全自動でテキストの抽出と、読みやすい形への再構築を行います。</p>
         <p><b>STEP 4: 確認とダウンロード</b><br>
         処理完了後、プレビュー画面が表示されます。内容を確認し、ページ下部のボタンからWordファイルをダウンロードして完了です。</p>
+        <hr>
+        <p style="font-size: 0.9em; color: #EF4444;"><b>【システム制限について】</b><br>
+        安定稼働のため、1回の処理につき<b>最大{}ファイル、合計{}ページまで</b>の制限を設けています。</p>
     </div>
-    """, unsafe_allow_html=True)
-    st.info("📌 ヒント: 文書内の「表」や「段組み」も、AIが自動で構造を判別して綺麗なレイアウトで出力します。")
+    """.format(MAX_FILES, MAX_TOTAL_PAGES), unsafe_allow_html=True)
 
 # ===== 左側：メイン作業エリア =====
 with main_col:
@@ -102,7 +88,8 @@ with main_col:
         st.write("### 1. ファイルのアップロード")
         upload_col1, upload_col2 = st.columns(2)
         with upload_col1:
-            uploaded_pdfs = st.file_uploader("📂 PDFファイルをドラッグ＆ドロップ（複数選択可）", type=["pdf"], accept_multiple_files=True)
+            # 防波堤1: UI側での注意喚起（Streamlitのデフォルトは200MBまで）
+            uploaded_pdfs = st.file_uploader(f"📂 PDFファイルをドラッグ＆ドロップ（最大{MAX_FILES}ファイルまで）", type=["pdf"], accept_multiple_files=True)
         with upload_col2:
             uploaded_word = st.file_uploader("📝 統合したい既存のWordファイル（任意）", type=["docx"])
             if uploaded_word:
@@ -114,6 +101,31 @@ with main_col:
             st.error("PDFファイルをアップロードしてください。")
             st.stop()
 
+        # 防波堤2: ファイル数の制限
+        if len(uploaded_pdfs) > MAX_FILES:
+            st.error(f"⚠️ アップロードできるファイルは最大{MAX_FILES}個までです。ファイルを減らして再実行してください。")
+            st.stop()
+
+        # 防波堤3: 合計ページ数のカウントと制限
+        total_pages = 0
+        with st.spinner("ファイルのページ数をチェックしています..."):
+            for pdf_file in uploaded_pdfs:
+                try:
+                    pdf_reader = PdfReader(pdf_file)
+                    total_pages += len(pdf_reader.pages)
+                    # ファイルポインタをリセット（重要：AIに送る前に最初に戻す）
+                    pdf_file.seek(0) 
+                except Exception as e:
+                    st.error(f"PDFファイルの読み取りに失敗しました ({pdf_file.name}): {e}")
+                    st.stop()
+
+        if total_pages > MAX_TOTAL_PAGES:
+            st.error(f"⚠️ ページ数オーバー: 今回アップロードされた合計ページ数は {total_pages} ページです。システムの安定稼働のため、1回の処理は合計 {MAX_TOTAL_PAGES} ページ以下にしてください。")
+            st.stop()
+
+        # --- 以下、文字起こし本処理 ---
+        st.info(f"合計 {total_pages} ページの処理を開始します...")
+        
         if uploaded_word:
             doc = Document(uploaded_word)
             doc.add_page_break() 
@@ -128,11 +140,9 @@ with main_col:
 
         try:
             model = genai.GenerativeModel(model_name="gemini-2.5-flash")
-            
             prompt = """
             このPDF文書のテキストを抽出し、人間が最も読みやすい論理的な構造で再構成してください。
             推測や事実の捏造は一切行わず、文書に記載されている情報のみを使用して、以下のルールを厳密に守ること：
-
             1. 【論理的な再配置】文書全体の論理的な流れを構築すること。文書の「タイトル（題名）」を特定し、その直後に「目次」ブロックを移動させて配置すること。その後ろに本文を順序良く続けること。
             2. 【文章の結合と整形】段組みやページ分割によって途切れた文章は、意味が通るように1つの文章・段落単位で綺麗に結合すること。文中の不自然な改行や、単語間の不要なスペースはすべて削除し、自然で読みやすい日本語の文章に修正すること。
             3. 【ノイズの排除】ヘッダー（例：「〔社会保険通報〕」）やフッター（例：ページ番号）、本文に関係のない記号などはすべて除外すること。
@@ -178,7 +188,6 @@ with main_col:
             st.write("下のボタンを押すと、お手元のPCやGoogle DriveにWordファイルとして保存できます。")
             
             today_str = datetime.now().strftime("%Y%m%d")
-            
             if total_files == 1:
                 original_name = uploaded_pdfs[0].name.replace(".pdf", "")
                 download_filename = f"{today_str}_{original_name}_抽出結果.docx"
